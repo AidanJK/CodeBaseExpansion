@@ -34,7 +34,7 @@ public class GameManager : MonoBehaviour
 
 
     [Header("UI ELEMENTS")]
-    private int totalScore;
+    [HideInInspector] public int totalScore;
     private float porcentageCurrent;
     [SerializeField] private TMP_Text pointsText;
     [SerializeField] private TMP_Text maxScoreText;
@@ -44,7 +44,6 @@ public class GameManager : MonoBehaviour
     public GameObject outro;
     [SerializeField] private TMP_Text maxScoreOutroText;
     [SerializeField] private TMP_Text scoreOutroText;
-
 
 
     [Header("SCORE VALUES")]
@@ -64,10 +63,19 @@ public class GameManager : MonoBehaviour
 
     [Header("LIFE ELEMENTS")]
     private int lifeCount = 3;
+    private int maxLifeCount = 3;
     [SerializeField] private Image hurtPanel;
     [SerializeField] private TMP_Text life1Text;
     [SerializeField] private TMP_Text life2Text;
     [SerializeField] private TMP_Text life3Text;
+    
+    [Header("PROGRESSION SYSTEM")]
+    [SerializeField] private TMP_Text moneyText;
+    [SerializeField] private GameObject moneyEarnedPrefab;
+    [SerializeField] private Transform moneyEarnedParent;
+    [SerializeField] private Button shopButton;
+    private float jarValueMultiplier = 1f;
+    private float comboMultiplier = 1f;
 
     private void Awake()
     {
@@ -76,24 +84,94 @@ public class GameManager : MonoBehaviour
         UpdateUI();
         instance = this;
         ball = GameObject.FindGameObjectWithTag("Ball");
+        
+        // Load progression values from PlayerPrefs
+        LoadProgressionValues();
     }
+    
     private void Start()
     {
         porcentageText.gameObject.SetActive(false);
         ReadComboCount();
+        
+        // Set up shop button
+        if (shopButton != null)
+        {
+            shopButton.onClick.AddListener(OpenShopMenu);
+        }
+        
+        // Initialize money display
+        UpdateMoneyDisplay();
     }
+    
+    // Load progression-related values from PlayerPrefs
+    private void LoadProgressionValues()
+    {
+        // Load upgraded values
+        riseAmount = PlayerPrefs.GetFloat("PourSpeedBase", riseAmount);
+        jarValueMultiplier = PlayerPrefs.GetFloat("JarValueMultiplier", 1f);
+        comboMultiplier = PlayerPrefs.GetFloat("ComboMultiplier", 1f);
+        
+        // Load accuracy bonuses
+        float goodRangeBonus = PlayerPrefs.GetFloat("GoodRangeBonus", 0f);
+        float perfectRangeBonus = PlayerPrefs.GetFloat("PerfectRangeBonus", 0f);
+        offsetGOOD += goodRangeBonus;
+        offsetPERFECT += perfectRangeBonus;
+        
+        // Load max lives
+        maxLifeCount = PlayerPrefs.GetInt("MaxLives", 3);
+        lifeCount = maxLifeCount;
+    }
+    
+    // Open the shop/upgrade menu
+    public void OpenShopMenu()
+    {
+        if (canPlay && !isOutro && ShopManager.instance != null)
+        {
+            ShopManager.instance.OpenShop();
+        }
+    }
+    
+    // Update money display
+    private void UpdateMoneyDisplay()
+    {
+        if (moneyText != null && CurrencyManager.instance != null)
+        {
+            moneyText.text = "$" + CurrencyManager.instance.GetCurrentMoney().ToString();
+        }
+    }
+    
     public void StartMugFunction()
     {
         StartCoroutine(PassTheOtherJar());
     }
+
     public void ChangeCurrentJar(Jar newJar)
     {
         ChangeRandomRise();
         currentJar = newJar;
         posLiquid = currentJar.startPosition;
-        //ball.transform.position = posLiquid;
         ballPosYStart = posLiquid.y;
+
+        // Apply current beer type to the new jar
+        if (CurrencyManager.instance != null)
+        {
+            BeerType currentBeer = CurrencyManager.instance.GetCurrentBeerType();
+            if (currentBeer != null)
+            {
+                // If using CurrencyManager's update method
+                CurrencyManager.instance.UpdateJarLiquid(newJar, currentBeer);
+
+                // Or directly update here
+                if (newJar.myLiquid != null && newJar.myLiquid.spriteRen != null)
+                {
+                    newJar.myLiquid.spriteRen.color = currentBeer.beerColor;
+                    // If using material properties, update them here
+                }
+            }
+        }
     }
+
     public void ClickInput()
     {
         if (currentJar != null)
@@ -102,13 +180,12 @@ public class GameManager : MonoBehaviour
             liquidRise.RiseTheLiquid(riseAmount * Time.deltaTime);
             posGoal = liquidRise.ReturnGoalPosition();
             float newScale = liquidRise.ReturnSizeY();
-            //float conversion = newScale / liquidRise.ReturnMaxJarHeight();
-            //float newPosY = Mathf.Lerp(posLiquid.y, posGoal.y + 1.5f, conversion);
             ball.transform.position = new Vector2(posLiquid.x, posLiquid.y + Mathf.Abs(newScale) +
                 PoolManager.instance.poolPatern.position.y);
             Debug.Log(ReturnDistanceGoal());
         }
     }
+    
     public void ButtonUpAction()
     {
         float distance = ReturnDistanceGoal();
@@ -117,6 +194,7 @@ public class GameManager : MonoBehaviour
         StartCoroutine(PassTheOtherJar());
         ReadComboCount();
     }
+    
     IEnumerator PassTheOtherJar()
     {
         yield return new WaitForSeconds(0.4f);
@@ -143,11 +221,15 @@ public class GameManager : MonoBehaviour
             isStartingGame = false;
         }
     }
+    
     void ChangeRandomRise()
     {
-        float random = Random.Range(4f, 8f);
+        // Modify to include the base pour speed from PlayerPrefs
+        float basePourSpeed = PlayerPrefs.GetFloat("PourSpeedBase", 6f);
+        float random = Random.Range(basePourSpeed - 2f, basePourSpeed + 2f);
         riseAmount = random;
     }
+    
     IEnumerator AnimationJar(GameObject go, bool enter)
     {
         if (enter)
@@ -179,6 +261,7 @@ public class GameManager : MonoBehaviour
             yield return null;
         }
     }
+    
     public float ReturnDistanceGoal()
     {
         return Mathf.Abs(posGoal.y - ball.transform.position.y);
@@ -188,6 +271,7 @@ public class GameManager : MonoBehaviour
     {
         return ball.transform.position.y;
     }
+    
     public void SiphonColorGrading()
     {
         if (!canSiphonColor) { return; }
@@ -209,22 +293,29 @@ public class GameManager : MonoBehaviour
             siphon.DOColor(ColorManager.instance.colorPerfect, timeDelayForColor);
         }
     }
+    
     public enum JarType
     {
         Mug, Cup, Boot, Long
     }
+    
     public void AddPoints(int pointsToAdd)
     {
         totalScore += pointsToAdd;
         StartCoroutine(PorcentageScoreAnimation());
         UpdateUI();
     }
+    
     void UpdateUI()
     {
         pointsText.text = totalScore.ToString();
         maxScoreText.text = "Max Score: " + PlayerPrefs.GetInt("MAXSCORE", 0);
         porcentageText.text = porcentageCurrent.ToString("00.00") + "%";
+        
+        // Update money display
+        UpdateMoneyDisplay();
     }
+    
     IEnumerator PorcentageScoreAnimation()
     {
         porcentageText.gameObject.SetActive(true);
@@ -233,16 +324,42 @@ public class GameManager : MonoBehaviour
         porcentageText.gameObject.SetActive(false);
         porcentageText.transform.DOScale(1f, 0f);
     }
+    
     void ScoreCalculator()
     {
         float porcentage = 100 - (ReturnDistanceGoal() * 100);
         porcentageCurrent = porcentage;
-        int addScore = (int)(currentJar.points * porcentage / 100);
-        int realAddScore = addScore * (1 + (countCombo / 10));
-        //EFFECTS
+        
+        // Get beer value multiplier
+        float beerValueMultiplier = 1f;
+        if (CurrencyManager.instance != null && CurrencyManager.instance.GetCurrentBeerType() != null)
+        {
+            beerValueMultiplier = CurrencyManager.instance.GetCurrentBeerType().baseValue / 100f;
+        }
+        
+        // Apply jar value multiplier from upgrades
+        int basePoints = Mathf.RoundToInt(currentJar.points * jarValueMultiplier);
+        
+        // Calculate score with enhanced combo system
+        int addScore = (int)(basePoints * porcentage / 100);
+        int realAddScore = Mathf.RoundToInt(addScore * (1 + (countCombo * comboMultiplier / 10)));
+        
+        // Calculate money earned
+        int moneyEarned = Mathf.RoundToInt(realAddScore * beerValueMultiplier);
+        
+        // Show money earned
+        ShowMoneyEarned(moneyEarned);
+        
+        // Add money to currency manager
+        if (CurrencyManager.instance != null)
+        {
+            CurrencyManager.instance.AddMoney(moneyEarned);
+        }
+        
+        // Add points for score tracking
         AddPoints(realAddScore);
 
-        //CHECK IF IS MAXSCORE
+        // CHECK IF IS MAXSCORE
         int maxScore = PlayerPrefs.GetInt("MAXSCORE", 0);
         if (totalScore > maxScore)
         {
@@ -250,6 +367,31 @@ public class GameManager : MonoBehaviour
         }
         UpdateUI();
     }
+    
+    // Show money earned animation
+    void ShowMoneyEarned(int amount)
+    {
+        if (moneyEarnedPrefab != null && moneyEarnedParent != null)
+        {
+            GameObject moneyObj = Instantiate(moneyEarnedPrefab, moneyEarnedParent);
+            TMP_Text moneyTextComponent = moneyObj.GetComponent<TMP_Text>();
+            
+            if (moneyTextComponent != null)
+            {
+                moneyTextComponent.text = "+$" + amount;
+                
+                // Set initial color
+                moneyTextComponent.color = new Color(0.2f, 0.9f, 0.2f);
+                
+                // Animate
+                Sequence sequence = DOTween.Sequence();
+                sequence.Append(moneyObj.transform.DOLocalMoveY(moneyObj.transform.localPosition.y + 100f, 1f));
+                sequence.Join(moneyTextComponent.DOFade(0, 1f));
+                sequence.OnComplete(() => Destroy(moneyObj));
+            }
+        }
+    }
+    
     void UpdateStyleText(int index)
     {
         //BAD 0, GOOD 1, PERFECT 2
@@ -269,8 +411,8 @@ public class GameManager : MonoBehaviour
             styleText.text = "Perfect";
             styleText.color = Color.green;
         }
-
     }
+    
     void ReadComboCount()
     {
         float dis = ReturnDistanceGoal();
@@ -292,6 +434,7 @@ public class GameManager : MonoBehaviour
         }
         ComboFunction();
     }
+    
     void ComboFunction()
     {
         if (countCombo == 1)
@@ -334,27 +477,39 @@ public class GameManager : MonoBehaviour
             return;
         }
     }
+    
     void DamageLifeCount()
     {
         StartCoroutine(HurtAnimation());
         lifeCount--;
-        if (lifeCount == 2)
+        if (lifeCount == maxLifeCount-1)
         {
             life3Text.color = comboOff;
         }
-        if (lifeCount == 1)
+        if (lifeCount == maxLifeCount-2)
         {
             life2Text.color = comboOff;
         }
-        if (lifeCount == 0)
+        if (lifeCount <= 0)
         {
             life1Text.color = comboOff;
             canPlay = false;
+            
+            // Update outro with both score and money
             maxScoreOutroText.text = "Max Score: " + PlayerPrefs.GetInt("MAXSCORE", 0);
             scoreOutroText.text = "Score: " + totalScore.ToString();
+            
+            // Add money display to outro if available
+            if (CurrencyManager.instance != null)
+            {
+                // You may need to add a reference to a TMP_Text for this in the inspector
+                // moneyOutroText.text = "Money: $" + CurrencyManager.instance.GetCurrentMoney();
+            }
+            
             StartCoroutine(OutroAnim());
         }
     }
+    
     IEnumerator OutroAnim()
     {
         AudioManager.instance.ChangePitch(0.5f, "background1");
@@ -363,6 +518,7 @@ public class GameManager : MonoBehaviour
         outro.GetComponent<CanvasGroup>().DOFade(1, animationDelay / 2);
         isOutro = true;
     }
+    
     IEnumerator HurtAnimation()
     {
         hurtPanel.gameObject.SetActive(true);
