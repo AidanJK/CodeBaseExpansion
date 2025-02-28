@@ -343,7 +343,7 @@ public class GameManager : MonoBehaviour
     }
     
     // Show money earned animation
-    void ShowMoneyEarned(int amount)
+    public void ShowMoneyEarned(int amount)
     {
         if (moneyEarnedPrefab != null && moneyEarnedParent != null)
         {

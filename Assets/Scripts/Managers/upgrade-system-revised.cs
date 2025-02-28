@@ -74,13 +74,23 @@ public class UpgradeSystem : MonoBehaviour
         UpdateMoneyText(CurrencyManager.instance.GetCurrentMoney());
         UpdateUpgradeButtonStates();
     }
-    
+
     public void RefreshBeerUI()
     {
+        // Check if CurrencyManager exists
+        if (CurrencyManager.instance == null)
+        {
+            Debug.LogError("CurrencyManager is null when trying to refresh beer UI");
+            return;
+        }
+
+        // Update money display
         UpdateMoneyText(CurrencyManager.instance.GetCurrentMoney());
-        UpdateBeerButtonStates();
+
+        // Always re-populate buttons to ensure they match the current state
+        PopulateBeerButtons();
     }
-    
+
     private void PopulateUpgradeButtons()
     {
         // Clear existing buttons
@@ -164,66 +174,112 @@ public class UpgradeSystem : MonoBehaviour
 
             beerButtons.Add(buttonObj);
 
-            // Find text component for beer name
-            TMP_Text nameText = buttonObj.GetComponentInChildren<TMP_Text>();
-            if (nameText != null)
+            // Find text component for beer name - use specific path
+            Transform beerNameTransform = buttonObj.transform.Find("BeerName");
+            if (beerNameTransform != null)
             {
-                nameText.text = beerType.beerName;
+                TMP_Text beerNameText = beerNameTransform.GetComponent<TMP_Text>();
+                if (beerNameText != null)
+                {
+                    beerNameText.text = beerType.beerName;
+                    Debug.Log("Set beer name: " + beerType.beerName);
+                }
             }
+            else
+            {
+                Debug.LogWarning("BeerName transform not found on beer button");
+            }
+
+            // Get references to important parts of the button
+            Transform unlockPanelTransform = buttonObj.transform.Find("UnlockPanel");
+            Transform selectButtonTransform = buttonObj.transform.Find("SelectButton");
+            Transform selectedTransform = buttonObj.transform.Find("Selected");
 
             // Setup button appearance based on unlock status
             if (beerType.isUnlocked)
             {
-                // Find select button
-                Button selectButton = buttonObj.GetComponentInChildren<Button>();
-                if (selectButton != null)
+                // This beer is unlocked - hide unlock panel, show select/selected
+                if (unlockPanelTransform != null)
+                    unlockPanelTransform.gameObject.SetActive(false);
+
+                if (selectButtonTransform != null && selectedTransform != null)
                 {
+                    Button selectButton = selectButtonTransform.GetComponent<Button>();
+
                     // Check if this is the currently selected beer
-                    bool isSelected = CurrencyManager.instance.GetCurrentBeerType() == beerType;
+                    bool isSelected = false;
+                    if (CurrencyManager.instance.GetCurrentBeerType() != null)
+                    {
+                        isSelected = CurrencyManager.instance.GetCurrentBeerType().beerName == beerType.beerName;
+                    }
 
                     // Configure button
                     if (isSelected)
                     {
                         // Show "Selected" text instead of button
-                        Transform selectedText = buttonObj.transform.Find("Selected");
-                        if (selectedText != null)
-                        {
-                            selectedText.gameObject.SetActive(true);
-                            selectButton.gameObject.SetActive(false);
-                        }
+                        selectedTransform.gameObject.SetActive(true);
+                        selectButtonTransform.gameObject.SetActive(false);
                     }
                     else
                     {
                         // Set up select button
-                        selectButton.onClick.AddListener(() => SelectBeerType(beerType));
+                        selectedTransform.gameObject.SetActive(false);
+                        selectButtonTransform.gameObject.SetActive(true);
 
-                        Transform selectedText = buttonObj.transform.Find("Selected");
-                        if (selectedText != null)
+                        if (selectButton != null)
                         {
-                            selectedText.gameObject.SetActive(false);
+                            // Clear existing listeners
+                            selectButton.onClick.RemoveAllListeners();
+                            // Add new listener
+                            selectButton.onClick.AddListener(() => SelectBeerType(beerType));
                         }
                     }
+                }
+                else
+                {
+                    Debug.LogWarning("SelectButton or Selected transform not found");
                 }
             }
             else
             {
-                // Set up unlock button
-                Button unlockButton = buttonObj.GetComponentInChildren<Button>();
-                if (unlockButton != null)
+                // This beer is locked - show unlock panel, hide select/selected
+                if (unlockPanelTransform != null)
                 {
-                    unlockButton.onClick.AddListener(() => UnlockBeerType(beerType));
-                    unlockButton.GetComponentInChildren<TMP_Text>().text = "Unlock: $" + beerType.unlockCost;
+                    unlockPanelTransform.gameObject.SetActive(true);
 
-                    // Disable if not enough money
-                    unlockButton.interactable = CurrencyManager.instance.GetCurrentMoney() >= beerType.unlockCost;
+                    // Set up unlock button
+                    Transform unlockButtonTransform = unlockPanelTransform.Find("UnlockButton");
+                    if (unlockButtonTransform != null)
+                    {
+                        Button unlockButton = unlockButtonTransform.GetComponent<Button>();
+                        if (unlockButton != null)
+                        {
+                            // Clear existing listeners
+                            unlockButton.onClick.RemoveAllListeners();
+                            // Add new listener
+                            unlockButton.onClick.AddListener(() => UnlockBeerType(beerType));
+
+                            // Find and update the unlock cost text
+                            int cost = beerType.unlockCost;
+                            string costText = "$" + cost;
+                            TMP_Text valueText = unlockButtonTransform.Find("Value")?.GetComponent<TMP_Text>();
+                            if (valueText != null)
+                            {
+                                valueText.text = "$" + beerType.unlockCost;
+                            }
+
+                            // Disable button if not enough money
+                            unlockButton.interactable = CurrencyManager.instance.GetCurrentMoney() >= beerType.unlockCost;
+                        }
+                    }
                 }
 
-                // Show cost information
-                TMP_Text valueText = buttonObj.transform.Find("Value")?.GetComponent<TMP_Text>();
-                if (valueText != null)
-                {
-                    valueText.text = "Value: $" + beerType.baseValue + " per perfect pour";
-                }
+                // Hide select/selected elements
+                if (selectButtonTransform != null)
+                    selectButtonTransform.gameObject.SetActive(false);
+
+                if (selectedTransform != null)
+                    selectedTransform.gameObject.SetActive(false);
             }
         }
     }
@@ -367,36 +423,64 @@ public class UpgradeSystem : MonoBehaviour
             AudioManager.instance.PlaySound("upgrade");
         }
     }
-    
+
     public void UnlockBeerType(BeerType beerType)
     {
-        if (CurrencyManager.instance.SpendMoney(beerType.unlockCost))
+        // Add a debug statement for troubleshooting
+        Debug.Log("Attempting to unlock beer: " + beerType.beerName + " (Cost: $" + beerType.unlockCost + ")");
+
+        // Check if we have enough money
+        if (CurrencyManager.instance != null && CurrencyManager.instance.SpendMoney(beerType.unlockCost))
         {
+            Debug.Log("Successfully unlocked beer: " + beerType.beerName);
+
             // Unlock the beer
             beerType.isUnlocked = true;
-            
-            // Save unlock status
-            SaveBeerUnlockStatus();
-            
+
             // Play unlock sound
-            AudioManager.instance.PlaySound("upgrade");
-            
+            if (AudioManager.instance != null)
+                AudioManager.instance.PlaySound("upgrade");
+
+            // Show a money deduction message
+            if (GameManager.instance != null)
+            {
+                GameManager.instance.ShowMoneyEarned(-beerType.unlockCost);
+            }
+
             // Refresh beer buttons
             PopulateBeerButtons();
+
+            // Optionally auto-select this beer
+            SelectBeerType(beerType);
+        }
+        else
+        {
+            Debug.Log("Not enough money to unlock beer: " + beerType.beerName);
+
+            // Optionally play a "can't afford" sound
+            if (AudioManager.instance != null)
+                AudioManager.instance.PlaySound("wrong");
         }
     }
 
     public void SelectBeerType(BeerType beerType)
     {
+        Debug.Log("Selecting beer: " + beerType.beerName);
+
         if (CurrencyManager.instance != null)
         {
             CurrencyManager.instance.SetBeerType(beerType);
 
             // Update the liquid color in game
-            UpdateLiquidColor(beerType.beerColor);
+            if (GameManager.instance != null && GameManager.instance.currentJar != null)
+            {
+                Debug.Log("Updating current jar liquid color");
+                UpdateLiquidColor(beerType.beerColor);
+            }
 
             // Play selection sound
-            AudioManager.instance.PlaySound("select");
+            if (AudioManager.instance != null)
+                AudioManager.instance.PlaySound("select");
 
             // Force refresh the entire beer button list
             // This will regenerate all buttons with correct selected states
@@ -446,17 +530,18 @@ public class UpgradeSystem : MonoBehaviour
         // Save changes
         PlayerPrefs.Save();
     }
-    
+
     private void UpdateLiquidColor(Color newColor)
     {
         // Find all active jars and update their liquid color
         Jar currentJar = GameManager.instance.currentJar;
         if (currentJar != null && currentJar.myLiquid != null && currentJar.myLiquid.spriteRen != null)
         {
+            Debug.Log("Setting jar liquid color to: " + newColor);
             currentJar.myLiquid.spriteRen.color = newColor;
         }
     }
-    
+
     private void SaveUpgradeStatus()
     {
         for (int i = 0; i < availableUpgrades.Count; i++)
