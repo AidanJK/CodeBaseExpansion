@@ -35,7 +35,26 @@ public class UpgradeSystem : MonoBehaviour
     private void Start()
     {
         //StartCoroutine(InitializeWithDelay());
+
+        // Initialize upgrades
         InitializeUpgrades();
+
+        // Populate the UI elements
+        PopulateUpgradeButtons();
+        PopulateBeerButtons();
+
+        // Update UI with current money
+        if (CurrencyManager.instance != null)
+        {
+            UpdateMoneyText(CurrencyManager.instance.GetCurrentMoney());
+
+            // Subscribe to currency changes
+            CurrencyManager.instance.OnMoneyChanged += UpdateMoneyText;
+        }
+        else
+        {
+            Debug.LogWarning("CurrencyManager instance is null in UpgradeSystem Start method");
+        }
     }
     private void InitializeUpgrades()
     {
@@ -110,7 +129,7 @@ public class UpgradeSystem : MonoBehaviour
         Debug.Log($"Initialized {availableUpgrades.Count} upgrades");
     }
 
-    /*private IEnumerator InitializeWithDelay()
+    private IEnumerator InitializeWithDelay()
     {
         // Try up to 3 times to find CurrencyManager
         int attempts = 0;
@@ -135,18 +154,41 @@ public class UpgradeSystem : MonoBehaviour
             // Subscribe to currency changes
             CurrencyManager.instance.OnMoneyChanged += UpdateMoneyText;
         }
-    }*/
+    }
     private void UpdateMoneyText(int currentMoney)
     {
         if (currentMoneyText != null)
             currentMoneyText.text = "$" + currentMoney.ToString();
     }
-    
+
+    // Update the RefreshUpgradeUI method to check for mismatches
     public void RefreshUpgradeUI()
     {
+        Debug.Log("Refreshing upgrade UI");
+
+        if (CurrencyManager.instance == null)
+        {
+            Debug.LogWarning("CurrencyManager.instance is null when refreshing upgrade UI");
+            return;
+        }
+
+        // Update money display
         UpdateMoneyText(CurrencyManager.instance.GetCurrentMoney());
+
+        // Check for button count mismatch that would indicate a problem
+        if (upgradeButtons.Count != availableUpgrades.Count)
+        {
+            Debug.LogWarning("Button count mismatch detected: " + upgradeButtons.Count +
+                             " buttons vs " + availableUpgrades.Count + " upgrades. Re-populating buttons.");
+            PopulateUpgradeButtons();
+            return;
+        }
+
+        // Update existing button states
         UpdateUpgradeButtonStates();
     }
+
+
 
     public void RefreshBeerUI()
     {
@@ -162,6 +204,32 @@ public class UpgradeSystem : MonoBehaviour
 
         // Always re-populate buttons to ensure they match the current state
         PopulateBeerButtons();
+    }
+    // Add this method to UpgradeSystem.cs
+    public void ForceRefreshAllUI()
+    {
+        Debug.Log("Force refreshing all UI");
+
+        // If CurrencyManager exists, get the current money
+        int currentMoney = 0;
+        if (CurrencyManager.instance != null)
+        {
+            currentMoney = CurrencyManager.instance.GetCurrentMoney();
+            Debug.Log("Current money: $" + currentMoney);
+        }
+        else
+        {
+            Debug.LogWarning("CurrencyManager.instance is null during UI refresh!");
+        }
+
+        // Update money display
+        UpdateMoneyText(currentMoney);
+
+        // Re-populate all buttons
+        PopulateUpgradeButtons();
+        PopulateBeerButtons();
+
+        Debug.Log("UI refresh complete");
     }
 
     private void PopulateUpgradeButtons()
@@ -200,53 +268,84 @@ public class UpgradeSystem : MonoBehaviour
 
             Debug.Log("Created upgrade button for: " + upgrade.upgradeName);
 
-            // Find and set text components (directly by name)
+            // Find text components using direct paths based on hierarchy
             Transform upgradeNameTransform = buttonObj.transform.Find("UpgradeName");
             Transform descriptionTransform = buttonObj.transform.Find("Description");
-            Transform costTransform = buttonObj.transform.Find("Cost");
-            Transform levelTransform = buttonObj.transform.Find("Level");
+            Transform unlockPanelTransform = buttonObj.transform.Find("UnlockPanel");
+
+            if (unlockPanelTransform == null)
+            {
+                Debug.LogError("UnlockPanel not found in button hierarchy for " + upgrade.upgradeName);
+                continue;
+            }
+
+            Transform unlockButtonTransform = unlockPanelTransform.Find("UnlockButton");
+
+            if (unlockButtonTransform == null)
+            {
+                Debug.LogError("UnlockButton not found in button hierarchy for " + upgrade.upgradeName);
+                continue;
+            }
+
+            Transform levelTransform = unlockButtonTransform.Find("Level");
+            Transform costTransform = unlockButtonTransform.Find("Cost");
 
             // Set text values if components exist
-            if (upgradeNameTransform != null && upgradeNameTransform.GetComponent<TMPro.TextMeshProUGUI>() != null)
-                upgradeNameTransform.GetComponent<TMPro.TextMeshProUGUI>().text = upgrade.upgradeName;
-
-            if (descriptionTransform != null && descriptionTransform.GetComponent<TMPro.TextMeshProUGUI>() != null)
-                descriptionTransform.GetComponent<TMPro.TextMeshProUGUI>().text = upgrade.description;
-
-            if (costTransform != null && costTransform.GetComponent<TMPro.TextMeshProUGUI>() != null)
-                costTransform.GetComponent<TMPro.TextMeshProUGUI>().text = "$" + GetNextUpgradeCost(upgrade);
-
-            if (levelTransform != null && levelTransform.GetComponent<TMPro.TextMeshProUGUI>() != null)
-                levelTransform.GetComponent<TMPro.TextMeshProUGUI>().text = "Level: " + upgrade.currentLevel + "/" + upgrade.maxLevel;
-
-            // Add button click listener
-            Button button = buttonObj.GetComponent<Button>();
-            if (button != null)
+            if (upgradeNameTransform != null && upgradeNameTransform.GetComponent<TMP_Text>() != null)
             {
-                // Create a local copy for the closure
-                Upgrade upgradeRef = upgrade;
-
-                // Clear existing listeners and add new one
-                button.onClick.RemoveAllListeners();
-                button.onClick.AddListener(() => PurchaseUpgrade(upgradeRef));
-
-                // Set button interactability based on upgrade state and cost
-                int cost = GetNextUpgradeCost(upgrade);
-                button.interactable = upgrade.currentLevel < upgrade.maxLevel &&
-                                     CurrencyManager.instance.GetCurrentMoney() >= cost;
-
-                if (upgrade.currentLevel >= upgrade.maxLevel && costTransform != null &&
-                    costTransform.GetComponent<TMPro.TextMeshProUGUI>() != null)
-                {
-                    costTransform.GetComponent<TMPro.TextMeshProUGUI>().text = "MAXED OUT";
-                }
+                upgradeNameTransform.GetComponent<TMP_Text>().text = upgrade.upgradeName;
+                Debug.Log("Set upgrade name: " + upgrade.upgradeName);
             }
+            else
+            {
+                Debug.LogWarning("UpgradeName component not found for " + upgrade.upgradeName);
+            }
+
+            if (descriptionTransform != null && descriptionTransform.GetComponent<TMP_Text>() != null)
+            {
+                descriptionTransform.GetComponent<TMP_Text>().text = upgrade.description;
+                Debug.Log("Set description for " + upgrade.upgradeName);
+            }
+            else
+            {
+                Debug.LogWarning("Description component not found for " + upgrade.upgradeName);
+            }
+
+            if (levelTransform != null && levelTransform.GetComponent<TMP_Text>() != null)
+            {
+                levelTransform.GetComponent<TMP_Text>().text = "Level: " + upgrade.currentLevel + "/" + upgrade.maxLevel;
+                Debug.Log("Set level text for " + upgrade.upgradeName);
+            }
+            else
+            {
+                Debug.LogWarning("Level component not found for " + upgrade.upgradeName);
+            }
+
+            if (costTransform != null && costTransform.GetComponent<TMP_Text>() != null)
+            {
+                if (upgrade.currentLevel >= upgrade.maxLevel)
+                {
+                    costTransform.GetComponent<TMP_Text>().text = "MAXED OUT";
+                }
+                else
+                {
+                    costTransform.GetComponent<TMP_Text>().text = "$" + GetNextUpgradeCost(upgrade);
+                }
+                Debug.Log("Set cost text for " + upgrade.upgradeName);
+            }
+            else
+            {
+                Debug.LogWarning("Cost component not found for " + upgrade.upgradeName);
+            }
+
+            // Set up the button's click handler and interactability
+            SetupUpgradeButton(buttonObj, upgrade);
         }
 
         Debug.Log("Finished populating " + upgradeButtons.Count + " upgrade buttons");
     }
 
-    private void PopulateBeerButtons()
+    public void PopulateBeerButtons()
     {
         Debug.Log("Populating beer buttons");
 
@@ -413,9 +512,34 @@ public class UpgradeSystem : MonoBehaviour
 
     private void UpdateUpgradeButtonStates()
     {
-        if (availableUpgrades == null || availableUpgrades.Count == 0) return;
-        if (upgradeButtons == null || upgradeButtons.Count == 0) return;
-        if (CurrencyManager.instance == null) return;
+        if (availableUpgrades == null || availableUpgrades.Count == 0)
+        {
+            Debug.LogWarning("No available upgrades to update");
+            return;
+        }
+
+        if (upgradeButtons == null || upgradeButtons.Count == 0)
+        {
+            Debug.LogWarning("No upgrade buttons to update");
+            return;
+        }
+
+        if (CurrencyManager.instance == null)
+        {
+            Debug.LogWarning("CurrencyManager instance is null when updating button states");
+            return;
+        }
+
+        // Log debug info
+        Debug.Log("Updating " + upgradeButtons.Count + " button states for " + availableUpgrades.Count + " upgrades");
+        int currentMoney = CurrencyManager.instance.GetCurrentMoney();
+
+        // Make sure we have the same number of buttons as upgrades
+        if (upgradeButtons.Count != availableUpgrades.Count)
+        {
+            Debug.LogWarning("Button count mismatch: " + upgradeButtons.Count + " buttons vs " +
+                             availableUpgrades.Count + " upgrades. Will update what we can.");
+        }
 
         for (int i = 0; i < availableUpgrades.Count && i < upgradeButtons.Count; i++)
         {
@@ -424,41 +548,70 @@ public class UpgradeSystem : MonoBehaviour
 
             if (upgrade == null || buttonObj == null) continue;
 
-            // Update button texts
-            Transform levelTransform = buttonObj.transform.Find("Level");
-            Transform costTransform = buttonObj.transform.Find("Cost");
+            // Find text components based on the hierarchy
+            Transform unlockPanel = buttonObj.transform.Find("UnlockPanel");
+            if (unlockPanel == null) continue;
 
-            if (levelTransform != null && levelTransform.GetComponent<TMP_Text>() != null)
+            Transform unlockButton = unlockPanel.Find("UnlockButton");
+            if (unlockButton == null) continue;
+
+            Transform levelTransform = unlockButton.Find("Level");
+            Transform costTransform = unlockButton.Find("Cost");
+
+            // Update level text
+            if (levelTransform != null)
             {
-                levelTransform.GetComponent<TMP_Text>().text = "Level: " + upgrade.currentLevel + "/" + upgrade.maxLevel;
-            }
-
-            if (costTransform != null && costTransform.GetComponent<TMP_Text>() != null)
-            {
-                costTransform.GetComponent<TMP_Text>().text = "$" + GetNextUpgradeCost(upgrade);
-            }
-
-            // Disable button if max level or not enough money
-            Button button = buttonObj.GetComponent<Button>();
-            if (button == null) continue;
-
-            int cost = GetNextUpgradeCost(upgrade);
-
-            if (upgrade.currentLevel >= upgrade.maxLevel)
-            {
-                button.interactable = false;
-                if (costTransform != null && costTransform.GetComponent<TMP_Text>() != null)
+                TMP_Text levelText = levelTransform.GetComponent<TMP_Text>();
+                if (levelText != null)
                 {
-                    costTransform.GetComponent<TMP_Text>().text = "MAXED OUT";
+                    string newText = "Level: " + upgrade.currentLevel + "/" + upgrade.maxLevel;
+                    if (levelText.text != newText) // Only update if changed
+                    {
+                        levelText.text = newText;
+                        Debug.Log("Updated level text for " + upgrade.upgradeName + " to: " + levelText.text);
+                    }
                 }
             }
-            else if (CurrencyManager.instance.GetCurrentMoney() < cost)
+
+            // Update cost text
+            if (costTransform != null)
             {
-                button.interactable = false;
+                TMP_Text costText = costTransform.GetComponent<TMP_Text>();
+                if (costText != null)
+                {
+                    string newText;
+                    if (upgrade.currentLevel >= upgrade.maxLevel)
+                    {
+                        newText = "MAXED OUT";
+                    }
+                    else
+                    {
+                        int cost = GetNextUpgradeCost(upgrade);
+                        newText = "$" + cost;
+                    }
+
+                    if (costText.text != newText) // Only update if changed
+                    {
+                        costText.text = newText;
+                        Debug.Log("Updated cost text for " + upgrade.upgradeName + " to: " + costText.text);
+                    }
+                }
             }
-            else
+
+            // Update button interactability
+            Button button = buttonObj.GetComponent<Button>();
+            if (button != null)
             {
-                button.interactable = true;
+                int cost = GetNextUpgradeCost(upgrade);
+                bool canAfford = currentMoney >= cost;
+                bool notMaxed = upgrade.currentLevel < upgrade.maxLevel;
+
+                bool shouldBeInteractable = canAfford && notMaxed;
+                if (button.interactable != shouldBeInteractable) // Only update if changed
+                {
+                    button.interactable = shouldBeInteractable;
+                    Debug.Log("Updated button interactability for " + upgrade.upgradeName + " to: " + button.interactable);
+                }
             }
         }
     }
@@ -531,24 +684,207 @@ public class UpgradeSystem : MonoBehaviour
         }
     }
 
+    // Enhanced purchase method with debugging
     public void PurchaseUpgrade(Upgrade upgrade)
     {
-        int cost = GetNextUpgradeCost(upgrade);
-        
-        if (CurrencyManager.instance.SpendMoney(cost) && upgrade.currentLevel < upgrade.maxLevel)
+        if (upgrade == null)
         {
+            Debug.LogError("Attempt to purchase null upgrade!");
+            return;
+        }
+
+        Debug.Log("PurchaseUpgrade called for: " + upgrade.upgradeName);
+        int cost = GetNextUpgradeCost(upgrade);
+
+        // Verify CurrencyManager exists
+        if (CurrencyManager.instance == null)
+        {
+            Debug.LogError("CurrencyManager.instance is null in PurchaseUpgrade!");
+            return;
+        }
+
+        int currentMoney = CurrencyManager.instance.GetCurrentMoney();
+        Debug.Log("Attempting purchase - Cost: $" + cost + ", Current money: $" + currentMoney +
+                  ", Current level: " + upgrade.currentLevel + "/" + upgrade.maxLevel);
+
+        // Check if we can afford it and are not at max level
+        bool canAfford = currentMoney >= cost;
+        bool notMaxLevel = upgrade.currentLevel < upgrade.maxLevel;
+
+        if (!canAfford)
+        {
+            Debug.LogWarning("Cannot afford upgrade " + upgrade.upgradeName + " - Cost: $" + cost +
+                             ", Current money: $" + currentMoney);
+            // Play "cannot afford" sound
+            if (AudioManager.instance != null)
+                AudioManager.instance.PlaySound("wrong");
+            return;
+        }
+
+        if (!notMaxLevel)
+        {
+            Debug.LogWarning("Upgrade " + upgrade.upgradeName + " already at max level: " +
+                             upgrade.currentLevel + "/" + upgrade.maxLevel);
+            return;
+        }
+
+        // Try to spend the money
+        bool spendSuccess = CurrencyManager.instance.SpendMoney(cost);
+
+        if (spendSuccess)
+        {
+            Debug.Log("Upgrade purchase successful for " + upgrade.upgradeName);
+
+            // Increment level
             upgrade.currentLevel++;
+
+            // Save the upgrade status
             SaveUpgradeStatus();
-            
+
             // Apply upgrade effect
             ApplyUpgradeEffect(upgrade);
-            
-            // Update UI
+
+            // Immediately update UI for this specific button
+            UpdateSpecificButtonUI(upgrade);
+
+            // Also update all buttons to refresh interactability based on new money amount
             UpdateUpgradeButtonStates();
-            
-            // Play sound effect
-            AudioManager.instance.PlaySound("upgrade");
+
+            // Play success sound
+            if (AudioManager.instance != null)
+                AudioManager.instance.PlaySound("upgrade");
+
+            // Show money decrease (optional)
+            if (GameManager.instance != null)
+            {
+                GameManager.instance.ShowMoneyEarned(-cost);
+            }
         }
+        else
+        {
+            Debug.LogError("Failed to spend money for upgrade " + upgrade.upgradeName +
+                          " even though we should have enough money. This should not happen!");
+        }
+    }
+    // New method to update a specific button immediately after purchase
+    private void UpdateSpecificButtonUI(Upgrade upgrade)
+    {
+        // Find the button associated with this upgrade
+        int upgradeIndex = availableUpgrades.IndexOf(upgrade);
+        if (upgradeIndex < 0 || upgradeIndex >= upgradeButtons.Count)
+        {
+            Debug.LogWarning("Cannot find button for upgrade: " + upgrade.upgradeName);
+            return;
+        }
+
+        GameObject buttonObj = upgradeButtons[upgradeIndex];
+        if (buttonObj == null)
+        {
+            Debug.LogWarning("Button object is null for upgrade: " + upgrade.upgradeName);
+            return;
+        }
+
+        Debug.Log("Immediately updating UI for " + upgrade.upgradeName + " button");
+
+        // Get references to text components
+        Transform unlockPanel = buttonObj.transform.Find("UnlockPanel");
+        if (unlockPanel == null) return;
+
+        Transform unlockButton = unlockPanel.Find("UnlockButton");
+        if (unlockButton == null) return;
+
+        // Update level text
+        Transform levelTransform = unlockButton.Find("Level");
+        if (levelTransform != null)
+        {
+            TMP_Text levelText = levelTransform.GetComponent<TMP_Text>();
+            if (levelText != null)
+            {
+                levelText.text = "Level: " + upgrade.currentLevel + "/" + upgrade.maxLevel;
+                Debug.Log("Updated level text to: " + levelText.text);
+            }
+        }
+
+        // Update cost text
+        Transform costTransform = unlockButton.Find("Cost");
+        if (costTransform != null)
+        {
+            TMP_Text costText = costTransform.GetComponent<TMP_Text>();
+            if (costText != null)
+            {
+                if (upgrade.currentLevel >= upgrade.maxLevel)
+                {
+                    costText.text = "MAX";
+                }
+                else
+                {
+                    int newCost = GetNextUpgradeCost(upgrade);
+                    costText.text = "$" + newCost;
+                }
+                Debug.Log("Updated cost text to: " + costText.text);
+            }
+        }
+
+        // Update button interactability
+        Button button = buttonObj.GetComponent<Button>();
+        if (button != null)
+        {
+            int newCost = GetNextUpgradeCost(upgrade);
+            int currentMoney = CurrencyManager.instance.GetCurrentMoney();
+            bool canAfford = currentMoney >= newCost;
+            bool notMaxed = upgrade.currentLevel < upgrade.maxLevel;
+
+            button.interactable = canAfford && notMaxed;
+            Debug.Log("Updated button interactability to: " + button.interactable);
+        }
+    }
+
+    // Enhanced button creation method with improved onClick handling
+    private void SetupUpgradeButton(GameObject buttonObj, Upgrade upgrade)
+    {
+        if (buttonObj == null || upgrade == null) return;
+
+        Button button = buttonObj.GetComponent<Button>();
+        if (button == null)
+        {
+            Debug.LogError("Button component missing on upgrade button object!");
+            return;
+        }
+
+        // First, remove any existing listeners to prevent duplicates
+        button.onClick.RemoveAllListeners();
+
+        // Store a copy of the upgrade to use in the callback
+        Upgrade upgradeCopy = upgrade;
+
+        // Add the click listener with debug logging
+        button.onClick.AddListener(() => {
+            Debug.Log("Button clicked for upgrade: " + upgradeCopy.upgradeName);
+            PurchaseUpgrade(upgradeCopy);
+        });
+
+        // Check interactability conditions
+        bool canAfford = false;
+        bool notMaxLevel = upgrade.currentLevel < upgrade.maxLevel;
+
+        if (CurrencyManager.instance != null)
+        {
+            int cost = GetNextUpgradeCost(upgrade);
+            int currentMoney = CurrencyManager.instance.GetCurrentMoney();
+            canAfford = currentMoney >= cost;
+
+            Debug.Log("Button for " + upgrade.upgradeName + " - Cost: $" + cost +
+                     ", Current money: $" + currentMoney + ", Can afford: " + canAfford);
+        }
+        else
+        {
+            Debug.LogWarning("CurrencyManager.instance is null when setting up button!");
+        }
+
+        // Set interactability
+        button.interactable = notMaxLevel && canAfford;
+
+        Debug.Log("Button for " + upgrade.upgradeName + " set to interactable: " + button.interactable);
     }
 
     public void UnlockBeerType(BeerType beerType)
@@ -721,4 +1057,23 @@ public class Upgrade
     public int maxLevel;
     public float baseValue;
     public float valueIncreasePerLevel;
+
+    // Override Equals and GetHashCode for proper equality comparison
+    public override bool Equals(object obj)
+    {
+        if (obj == null || !(obj is Upgrade))
+            return false;
+
+        Upgrade other = (Upgrade)obj;
+        // Use upgradeType and upgradeName as the equality criteria
+        // This assumes no two upgrades have the same name and type
+        return this.upgradeType == other.upgradeType &&
+               this.upgradeName == other.upgradeName;
+    }
+
+    public override int GetHashCode()
+    {
+        // Create a unique hash code based on name and type
+        return (upgradeName + upgradeType.ToString()).GetHashCode();
+    }
 }

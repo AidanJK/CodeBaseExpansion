@@ -96,6 +96,17 @@ public class ShopManager : MonoBehaviour
         // Show shop panel
         shopPanel.SetActive(true);
 
+        // Force refresh all UI elements
+        if (UpgradeSystem.instance != null)
+        {
+            Debug.Log("Performing full UI refresh on shop open");
+            UpgradeSystem.instance.ForceRefreshAllUI();
+        }
+        else
+        {
+            Debug.LogError("UpgradeSystem.instance is null when opening shop! UI will not be refreshed.");
+        }
+
         // Default to showing the beer selection panel
         ShowBeerSelectionPanel();
 
