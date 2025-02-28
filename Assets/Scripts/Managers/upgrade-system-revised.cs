@@ -34,10 +34,83 @@ public class UpgradeSystem : MonoBehaviour
 
     private void Start()
     {
-        StartCoroutine(InitializeWithDelay());
+        //StartCoroutine(InitializeWithDelay());
+        InitializeUpgrades();
+    }
+    private void InitializeUpgrades()
+    {
+        // Clear any existing upgrades
+        availableUpgrades.Clear();
+
+        // POURING UPGRADES
+        availableUpgrades.Add(new Upgrade
+        {
+            upgradeName = "Steady Hand",
+            description = "Increases pouring speed for faster filling",
+            upgradeType = UpgradeType.PourSpeed,
+            baseCost = 50,
+            costIncreasePerLevel = 100,
+            currentLevel = 0,
+            maxLevel = 5,
+            baseValue = 6f,  // Initial pour speed value
+            valueIncreasePerLevel = 0.5f  // Pour speed increase per level
+        });
+
+        // VALUE MULTIPLIER UPGRADES
+        availableUpgrades.Add(new Upgrade
+        {
+            upgradeName = "Premium Glassware",
+            description = "Increases the value of all pours by 10% per level",
+            upgradeType = UpgradeType.GlassValueMultiplier,
+            baseCost = 200,
+            costIncreasePerLevel = 250,
+            currentLevel = 0,
+            maxLevel = 5,
+            baseValue = 1f,  // Base multiplier (100%)
+            valueIncreasePerLevel = 0.1f  // 10% increase per level
+        });
+
+        // ACCURACY UPGRADES
+        availableUpgrades.Add(new Upgrade
+        {
+            upgradeName = "Pouring Precision",
+            description = "Makes it easier to hit 'Good' and 'Perfect' ranges",
+            upgradeType = UpgradeType.AccuracyBonus,
+            baseCost = 100,
+            costIncreasePerLevel = 200,
+            currentLevel = 0,
+            maxLevel = 5,
+            baseValue = 0f,
+            valueIncreasePerLevel = 0.025f  // Increases the size of good/perfect ranges
+        });
+
+        // COMBO UPGRADES
+        availableUpgrades.Add(new Upgrade
+        {
+            upgradeName = "Combo Master",
+            description = "Increases the bonus for combos by 10% per level",
+            upgradeType = UpgradeType.ComboMultiplier,
+            baseCost = 150,
+            costIncreasePerLevel = 300,
+            currentLevel = 0,
+            maxLevel = 3,
+            baseValue = 1f,
+            valueIncreasePerLevel = 0.1f
+        });
+
+        // Load saved upgrade levels
+        LoadUpgradeStatus();
+
+        // Apply all upgrades at their current levels
+        foreach (var upgrade in availableUpgrades)
+        {
+            ApplyUpgradeEffect(upgrade);
+        }
+
+        Debug.Log($"Initialized {availableUpgrades.Count} upgrades");
     }
 
-    private IEnumerator InitializeWithDelay()
+    /*private IEnumerator InitializeWithDelay()
     {
         // Try up to 3 times to find CurrencyManager
         int attempts = 0;
@@ -62,7 +135,7 @@ public class UpgradeSystem : MonoBehaviour
             // Subscribe to currency changes
             CurrencyManager.instance.OnMoneyChanged += UpdateMoneyText;
         }
-    }
+    }*/
     private void UpdateMoneyText(int currentMoney)
     {
         if (currentMoneyText != null)
@@ -93,30 +166,84 @@ public class UpgradeSystem : MonoBehaviour
 
     private void PopulateUpgradeButtons()
     {
+        Debug.Log("Populating upgrade buttons");
+
         // Clear existing buttons
         foreach (GameObject button in upgradeButtons)
         {
-            Destroy(button);
+            if (button != null)
+                Destroy(button);
         }
         upgradeButtons.Clear();
-        
+
+        // Check if prefab and container exist
+        if (upgradeButtonPrefab == null)
+        {
+            Debug.LogError("Upgrade button prefab is not assigned!");
+            return;
+        }
+
+        if (upgradeButtonContainer == null)
+        {
+            Debug.LogError("Upgrade button container is not assigned!");
+            return;
+        }
+
         // Create new buttons for each upgrade
         foreach (Upgrade upgrade in availableUpgrades)
         {
+            if (upgrade == null) continue;
+
+            // Create button instance
             GameObject buttonObj = Instantiate(upgradeButtonPrefab, upgradeButtonContainer);
             upgradeButtons.Add(buttonObj);
-            
-            // Set button text and data
-            buttonObj.transform.Find("UpgradeName").GetComponent<TMP_Text>().text = upgrade.upgradeName;
-            buttonObj.transform.Find("Description").GetComponent<TMP_Text>().text = upgrade.description;
-            buttonObj.transform.Find("Cost").GetComponent<TMP_Text>().text = "$" + GetNextUpgradeCost(upgrade);
-            buttonObj.transform.Find("Level").GetComponent<TMP_Text>().text = "Level: " + upgrade.currentLevel + "/" + upgrade.maxLevel;
-            
+
+            Debug.Log("Created upgrade button for: " + upgrade.upgradeName);
+
+            // Find and set text components (directly by name)
+            Transform upgradeNameTransform = buttonObj.transform.Find("UpgradeName");
+            Transform descriptionTransform = buttonObj.transform.Find("Description");
+            Transform costTransform = buttonObj.transform.Find("Cost");
+            Transform levelTransform = buttonObj.transform.Find("Level");
+
+            // Set text values if components exist
+            if (upgradeNameTransform != null && upgradeNameTransform.GetComponent<TMPro.TextMeshProUGUI>() != null)
+                upgradeNameTransform.GetComponent<TMPro.TextMeshProUGUI>().text = upgrade.upgradeName;
+
+            if (descriptionTransform != null && descriptionTransform.GetComponent<TMPro.TextMeshProUGUI>() != null)
+                descriptionTransform.GetComponent<TMPro.TextMeshProUGUI>().text = upgrade.description;
+
+            if (costTransform != null && costTransform.GetComponent<TMPro.TextMeshProUGUI>() != null)
+                costTransform.GetComponent<TMPro.TextMeshProUGUI>().text = "$" + GetNextUpgradeCost(upgrade);
+
+            if (levelTransform != null && levelTransform.GetComponent<TMPro.TextMeshProUGUI>() != null)
+                levelTransform.GetComponent<TMPro.TextMeshProUGUI>().text = "Level: " + upgrade.currentLevel + "/" + upgrade.maxLevel;
+
             // Add button click listener
             Button button = buttonObj.GetComponent<Button>();
-            Upgrade upgradeRef = upgrade; // Create local variable for closure
-            button.onClick.AddListener(() => PurchaseUpgrade(upgradeRef));
+            if (button != null)
+            {
+                // Create a local copy for the closure
+                Upgrade upgradeRef = upgrade;
+
+                // Clear existing listeners and add new one
+                button.onClick.RemoveAllListeners();
+                button.onClick.AddListener(() => PurchaseUpgrade(upgradeRef));
+
+                // Set button interactability based on upgrade state and cost
+                int cost = GetNextUpgradeCost(upgrade);
+                button.interactable = upgrade.currentLevel < upgrade.maxLevel &&
+                                     CurrencyManager.instance.GetCurrentMoney() >= cost;
+
+                if (upgrade.currentLevel >= upgrade.maxLevel && costTransform != null &&
+                    costTransform.GetComponent<TMPro.TextMeshProUGUI>() != null)
+                {
+                    costTransform.GetComponent<TMPro.TextMeshProUGUI>().text = "MAXED OUT";
+                }
+            }
         }
+
+        Debug.Log("Finished populating " + upgradeButtons.Count + " upgrade buttons");
     }
 
     private void PopulateBeerButtons()
@@ -521,10 +648,6 @@ public class UpgradeSystem : MonoBehaviour
                 PlayerPrefs.SetFloat("ComboMultiplier", 1 + (upgrade.valueIncreasePerLevel * upgrade.currentLevel));
                 break;
                 
-            case UpgradeType.ExtraLife:
-                // Add an extra life (simply increase max lives)
-                PlayerPrefs.SetInt("MaxLives", 3 + upgrade.currentLevel);
-                break;
         }
         
         // Save changes
@@ -533,13 +656,9 @@ public class UpgradeSystem : MonoBehaviour
 
     private void UpdateLiquidColor(Color newColor)
     {
-        // Find all active jars and update their liquid color
-        Jar currentJar = GameManager.instance.currentJar;
-        if (currentJar != null && currentJar.myLiquid != null && currentJar.myLiquid.spriteRen != null)
-        {
-            Debug.Log("Setting jar liquid color to: " + newColor);
-            currentJar.myLiquid.spriteRen.color = newColor;
-        }
+        SpriteRenderer liquid = GameManager.instance.currentJar.myLiquid.spriteRen;
+        liquid.color = newColor;
+
     }
 
     private void SaveUpgradeStatus()

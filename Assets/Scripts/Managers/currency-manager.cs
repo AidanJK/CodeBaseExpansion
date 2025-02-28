@@ -199,21 +199,88 @@ public class CurrencyManager : MonoBehaviour
     // Method to update the jar's liquid appearance
     public void UpdateJarLiquid(Jar jar, BeerType beerType)
     {
-        if (jar.myLiquid != null && jar.myLiquid.spriteRen != null)
+        if (jar == null || beerType == null)
         {
-            // If using just color property
-            jar.myLiquid.spriteRen.color = beerType.beerColor;
+            Debug.LogWarning("UpdateJarLiquid: Jar or BeerType is null");
+            return;
+        }
 
-            // If using a material/shader
-            Material beerMaterial = jar.myLiquid.spriteRen.material;
-            if (beerMaterial != null)
+        Debug.Log($"Updating jar '{jar.nameOfJar}' with beer color: {beerType.beerColor}");
+
+        // First, ensure we have the sprite renderer
+        if (jar.myLiquid != null)
+        {
+            // Make sure the liquid's SpriteRenderer is properly initialized
+            if (jar.myLiquid.spriteRen == null)
             {
-                // Update material properties based on beer type
-                beerMaterial.SetColor("_BeerColor", beerType.beerColor);
-                // Add other material property updates as needed
+                jar.myLiquid.spriteRen = jar.myLiquid.GetComponent<SpriteRenderer>();
+                Debug.Log("Had to get SpriteRenderer component");
+            }
+
+            if (jar.myLiquid.spriteRen != null)
+            {
+                // Update the color property
+                Color oldColor = jar.myLiquid.spriteRen.color;
+                jar.myLiquid.spriteRen.color = beerType.beerColor;
+                Debug.Log($"Updated color from {oldColor} to {beerType.beerColor}");
+
+                // If using a custom material/shader with properties
+                Material beerMaterial = jar.myLiquid.spriteRen.material;
+                if (beerMaterial != null)
+                {
+                    // Check if material has these properties and update them
+                    if (beerMaterial.HasProperty("_BaseColor"))
+                    {
+                        beerMaterial.SetColor("_BaseColor", beerType.beerColor);
+                        Debug.Log("Updated _BaseColor property on material");
+                    }
+
+                    if (beerMaterial.HasProperty("_BeerColor"))
+                    {
+                        beerMaterial.SetColor("_BeerColor", beerType.beerColor);
+                        Debug.Log("Updated _BeerColor property on material");
+                    }
+
+                    // Update foam height if the property exists
+                    if (beerMaterial.HasProperty("_FoamHeight"))
+                    {
+                        beerMaterial.SetFloat("_FoamHeight", beerType.foamHeight);
+                        Debug.Log($"Updated foam height to {beerType.foamHeight}");
+                    }
+
+                    // Update bubble intensity if the property exists
+                    if (beerMaterial.HasProperty("_BubbleIntensity"))
+                    {
+                        beerMaterial.SetFloat("_BubbleIntensity", beerType.bubbleIntensity);
+                        Debug.Log($"Updated bubble intensity to {beerType.bubbleIntensity}");
+                    }
+                }
+                else
+                {
+                    Debug.LogWarning("Beer material is null");
+                }
+            }
+            else
+            {
+                Debug.LogError("Liquid SpriteRenderer is null after attempted initialization");
             }
         }
+        else
+        {
+            Debug.LogError("Jar's myLiquid reference is null");
+        }
     }
+
+    // Add this method to ensure the current jar updates immediately when a beer is selected
+    public void ForceUpdateCurrentJar()
+    {
+        if (GameManager.instance != null && GameManager.instance.currentJar != null && currentBeerType != null)
+        {
+            Debug.Log("Force updating current jar liquid to match selected beer");
+            UpdateJarLiquid(GameManager.instance.currentJar, currentBeerType);
+        }
+    }
+
     public BeerType GetCurrentBeerType()
     {
         return currentBeerType;
