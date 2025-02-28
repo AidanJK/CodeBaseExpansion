@@ -3,6 +3,7 @@ using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
 using DG.Tweening;
+using System.Collections;
 
 public class UpgradeSystem : MonoBehaviour
 {
@@ -30,21 +31,38 @@ public class UpgradeSystem : MonoBehaviour
         else
             Destroy(gameObject);
     }
-    
+
     private void Start()
     {
-        // Load saved upgrades
-        LoadUpgradeStatus();
-        
-        // Generate initial UI elements
-        PopulateUpgradeButtons();
-        PopulateBeerButtons();
-        
-        // Subscribe to currency changes
-        if (CurrencyManager.instance != null)
-            CurrencyManager.instance.OnMoneyChanged += UpdateMoneyText;
+        StartCoroutine(InitializeWithDelay());
     }
-    
+
+    private IEnumerator InitializeWithDelay()
+    {
+        // Try up to 3 times to find CurrencyManager
+        int attempts = 0;
+        while (CurrencyManager.instance == null && attempts < 3)
+        {
+            Debug.Log("Waiting for CurrencyManager to initialize... (attempt " + attempts + ")");
+            yield return new WaitForSeconds(0.5f);
+            attempts++;
+        }
+
+        if (CurrencyManager.instance == null)
+        {
+            Debug.LogError("Failed to find CurrencyManager after multiple attempts. Make sure it exists in the scene.");
+        }
+        else
+        {
+            // Continue with initialization
+            LoadUpgradeStatus();
+            PopulateUpgradeButtons();
+            PopulateBeerButtons();
+
+            // Subscribe to currency changes
+            CurrencyManager.instance.OnMoneyChanged += UpdateMoneyText;
+        }
+    }
     private void UpdateMoneyText(int currentMoney)
     {
         if (currentMoneyText != null)
@@ -90,97 +108,166 @@ public class UpgradeSystem : MonoBehaviour
             button.onClick.AddListener(() => PurchaseUpgrade(upgradeRef));
         }
     }
-    
+
     private void PopulateBeerButtons()
     {
+        Debug.Log("Populating beer buttons");
+
         // Clear existing buttons
         foreach (GameObject button in beerButtons)
         {
-            Destroy(button);
+            if (button != null)
+                Destroy(button);
         }
         beerButtons.Clear();
-        
-        if (CurrencyManager.instance == null) return;
-        
-        // Create buttons for each beer type
-        foreach (BeerType beerType in CurrencyManager.instance.GetAvailableBeerTypes())
+
+        // Check if CurrencyManager exists
+        if (CurrencyManager.instance == null)
         {
+            Debug.LogError("CurrencyManager instance is null. Cannot populate beer buttons.");
+            return;
+        }
+
+        // Get beer types
+        BeerType[] beerTypes = CurrencyManager.instance.GetAvailableBeerTypes();
+
+        // Debug log to check if we're getting beer types
+        Debug.Log("Found " + (beerTypes?.Length ?? 0) + " beer types");
+
+        if (beerTypes == null || beerTypes.Length == 0)
+        {
+            Debug.LogWarning("No beer types available in CurrencyManager.");
+            return;
+        }
+
+        // Check if prefab and container exist
+        if (beerButtonPrefab == null)
+        {
+            Debug.LogError("Beer button prefab is not assigned!");
+            return;
+        }
+
+        if (beerButtonContainer == null)
+        {
+            Debug.LogError("Beer button container is not assigned!");
+            return;
+        }
+
+        // Create buttons for each beer type
+        foreach (BeerType beerType in beerTypes)
+        {
+            if (beerType == null) continue;
+
+            // Create button instance
             GameObject buttonObj = Instantiate(beerButtonPrefab, beerButtonContainer);
+            if (buttonObj == null) continue;
+
             beerButtons.Add(buttonObj);
-            
-            // Set button text and image
-            buttonObj.transform.Find("BeerName").GetComponent<TMP_Text>().text = beerType.beerName;
-            
+
+            // Find text component for beer name
+            TMP_Text nameText = buttonObj.GetComponentInChildren<TMP_Text>();
+            if (nameText != null)
+            {
+                nameText.text = beerType.beerName;
+            }
+
+            // Setup button appearance based on unlock status
             if (beerType.isUnlocked)
             {
-                // Show selection button for unlocked beers
-                buttonObj.transform.Find("UnlockPanel").gameObject.SetActive(false);
-                buttonObj.transform.Find("SelectButton").gameObject.SetActive(true);
-                
-                // Value display
-                buttonObj.transform.Find("Value").GetComponent<TMP_Text>().text = "Value: $" + beerType.baseValue + " per perfect pour";
-                
-                // Set image
-                if (buttonObj.transform.Find("BeerImage").GetComponent<Image>() != null && beerType.beerSprite != null)
-                    buttonObj.transform.Find("BeerImage").GetComponent<Image>().sprite = beerType.beerSprite;
-                
-                // Show "selected" for current beer
-                BeerType currentBeer = CurrencyManager.instance.GetCurrentBeerType();
-                if (beerType.beerName == currentBeer.beerName)
+                // Find select button
+                Button selectButton = buttonObj.GetComponentInChildren<Button>();
+                if (selectButton != null)
                 {
-                    buttonObj.transform.Find("Selected").gameObject.SetActive(true);
-                    buttonObj.transform.Find("SelectButton").gameObject.SetActive(false);
+                    // Check if this is the currently selected beer
+                    bool isSelected = CurrencyManager.instance.GetCurrentBeerType() == beerType;
+
+                    // Configure button
+                    if (isSelected)
+                    {
+                        // Show "Selected" text instead of button
+                        Transform selectedText = buttonObj.transform.Find("Selected");
+                        if (selectedText != null)
+                        {
+                            selectedText.gameObject.SetActive(true);
+                            selectButton.gameObject.SetActive(false);
+                        }
+                    }
+                    else
+                    {
+                        // Set up select button
+                        selectButton.onClick.AddListener(() => SelectBeerType(beerType));
+
+                        Transform selectedText = buttonObj.transform.Find("Selected");
+                        if (selectedText != null)
+                        {
+                            selectedText.gameObject.SetActive(false);
+                        }
+                    }
                 }
-                else
-                {
-                    buttonObj.transform.Find("Selected").gameObject.SetActive(false);
-                }
-                
-                // Add select button listener
-                Button selectButton = buttonObj.transform.Find("SelectButton").GetComponent<Button>();
-                BeerType beerTypeRef = beerType; // Create local variable for closure
-                selectButton.onClick.AddListener(() => SelectBeerType(beerTypeRef));
             }
             else
             {
-                // Show unlock panel for locked beers
-                buttonObj.transform.Find("UnlockPanel").gameObject.SetActive(true);
-                buttonObj.transform.Find("SelectButton").gameObject.SetActive(false);
-                buttonObj.transform.Find("Selected").gameObject.SetActive(false);
-                
-                // Set unlock cost
-                buttonObj.transform.Find("UnlockPanel/UnlockCost").GetComponent<TMP_Text>().text = "$" + beerType.unlockCost;
-                
-                // Value preview
-                buttonObj.transform.Find("Value").GetComponent<TMP_Text>().text = "Value: $" + beerType.baseValue + " per perfect pour";
-                
-                // Add unlock button listener
-                Button unlockButton = buttonObj.transform.Find("UnlockPanel/UnlockButton").GetComponent<Button>();
-                BeerType beerTypeRef = beerType; // Create local variable for closure
-                unlockButton.onClick.AddListener(() => UnlockBeerType(beerTypeRef));
+                // Set up unlock button
+                Button unlockButton = buttonObj.GetComponentInChildren<Button>();
+                if (unlockButton != null)
+                {
+                    unlockButton.onClick.AddListener(() => UnlockBeerType(beerType));
+                    unlockButton.GetComponentInChildren<TMP_Text>().text = "Unlock: $" + beerType.unlockCost;
+
+                    // Disable if not enough money
+                    unlockButton.interactable = CurrencyManager.instance.GetCurrentMoney() >= beerType.unlockCost;
+                }
+
+                // Show cost information
+                TMP_Text valueText = buttonObj.transform.Find("Value")?.GetComponent<TMP_Text>();
+                if (valueText != null)
+                {
+                    valueText.text = "Value: $" + beerType.baseValue + " per perfect pour";
+                }
             }
         }
     }
-    
+
     private void UpdateUpgradeButtonStates()
     {
+        if (availableUpgrades == null || availableUpgrades.Count == 0) return;
+        if (upgradeButtons == null || upgradeButtons.Count == 0) return;
+        if (CurrencyManager.instance == null) return;
+
         for (int i = 0; i < availableUpgrades.Count && i < upgradeButtons.Count; i++)
         {
             Upgrade upgrade = availableUpgrades[i];
             GameObject buttonObj = upgradeButtons[i];
-            
+
+            if (upgrade == null || buttonObj == null) continue;
+
             // Update button texts
-            buttonObj.transform.Find("Level").GetComponent<TMP_Text>().text = "Level: " + upgrade.currentLevel + "/" + upgrade.maxLevel;
-            buttonObj.transform.Find("Cost").GetComponent<TMP_Text>().text = "$" + GetNextUpgradeCost(upgrade);
-            
+            Transform levelTransform = buttonObj.transform.Find("Level");
+            Transform costTransform = buttonObj.transform.Find("Cost");
+
+            if (levelTransform != null && levelTransform.GetComponent<TMP_Text>() != null)
+            {
+                levelTransform.GetComponent<TMP_Text>().text = "Level: " + upgrade.currentLevel + "/" + upgrade.maxLevel;
+            }
+
+            if (costTransform != null && costTransform.GetComponent<TMP_Text>() != null)
+            {
+                costTransform.GetComponent<TMP_Text>().text = "$" + GetNextUpgradeCost(upgrade);
+            }
+
             // Disable button if max level or not enough money
             Button button = buttonObj.GetComponent<Button>();
+            if (button == null) continue;
+
             int cost = GetNextUpgradeCost(upgrade);
-            
+
             if (upgrade.currentLevel >= upgrade.maxLevel)
             {
                 button.interactable = false;
-                buttonObj.transform.Find("Cost").GetComponent<TMP_Text>().text = "MAXED OUT";
+                if (costTransform != null && costTransform.GetComponent<TMP_Text>() != null)
+                {
+                    costTransform.GetComponent<TMP_Text>().text = "MAXED OUT";
+                }
             }
             else if (CurrencyManager.instance.GetCurrentMoney() < cost)
             {
@@ -192,53 +279,75 @@ public class UpgradeSystem : MonoBehaviour
             }
         }
     }
-    
+
     private void UpdateBeerButtonStates()
     {
         if (CurrencyManager.instance == null) return;
-        
+        if (beerButtons == null || beerButtons.Count == 0) return;
+
+        BeerType[] availableBeerTypes = CurrencyManager.instance.GetAvailableBeerTypes();
+        if (availableBeerTypes == null || availableBeerTypes.Length == 0) return;
+
         foreach (GameObject buttonObj in beerButtons)
         {
-            string beerName = buttonObj.transform.Find("BeerName").GetComponent<TMP_Text>().text;
-            
+            if (buttonObj == null) continue;
+
+            Transform beerNameTransform = buttonObj.transform.Find("BeerName");
+            if (beerNameTransform == null) continue;
+
+            TMP_Text beerNameText = beerNameTransform.GetComponent<TMP_Text>();
+            if (beerNameText == null) continue;
+
+            string beerName = beerNameText.text;
+
             // Find this beer type
             BeerType foundBeer = null;
-            foreach (BeerType bt in CurrencyManager.instance.GetAvailableBeerTypes())
+            foreach (BeerType bt in availableBeerTypes)
             {
-                if (bt.beerName == beerName)
+                if (bt != null && bt.beerName == beerName)
                 {
                     foundBeer = bt;
                     break;
                 }
             }
-            
+
             if (foundBeer != null)
             {
+                Transform selectedTransform = buttonObj.transform.Find("Selected");
+                Transform selectButtonTransform = buttonObj.transform.Find("SelectButton");
+                Transform unlockPanelTransform = buttonObj.transform.Find("UnlockPanel");
+
+                if (selectedTransform == null || selectButtonTransform == null || unlockPanelTransform == null)
+                    continue;
+
                 if (foundBeer.isUnlocked)
                 {
                     // Update selected status
                     BeerType currentBeer = CurrencyManager.instance.GetCurrentBeerType();
-                    if (foundBeer.beerName == currentBeer.beerName)
+                    if (currentBeer != null && foundBeer.beerName == currentBeer.beerName)
                     {
-                        buttonObj.transform.Find("Selected").gameObject.SetActive(true);
-                        buttonObj.transform.Find("SelectButton").gameObject.SetActive(false);
+                        selectedTransform.gameObject.SetActive(true);
+                        selectButtonTransform.gameObject.SetActive(false);
                     }
                     else
                     {
-                        buttonObj.transform.Find("Selected").gameObject.SetActive(false);
-                        buttonObj.transform.Find("SelectButton").gameObject.SetActive(true);
+                        selectedTransform.gameObject.SetActive(false);
+                        selectButtonTransform.gameObject.SetActive(true);
                     }
                 }
                 else
                 {
                     // Update unlock button state based on money
-                    Button unlockButton = buttonObj.transform.Find("UnlockPanel/UnlockButton").GetComponent<Button>();
-                    unlockButton.interactable = CurrencyManager.instance.GetCurrentMoney() >= foundBeer.unlockCost;
+                    Button unlockButton = unlockPanelTransform.Find("UnlockButton")?.GetComponent<Button>();
+                    if (unlockButton != null)
+                    {
+                        unlockButton.interactable = CurrencyManager.instance.GetCurrentMoney() >= foundBeer.unlockCost;
+                    }
                 }
             }
         }
     }
-    
+
     public void PurchaseUpgrade(Upgrade upgrade)
     {
         int cost = GetNextUpgradeCost(upgrade);
@@ -276,24 +385,25 @@ public class UpgradeSystem : MonoBehaviour
             PopulateBeerButtons();
         }
     }
-    
+
     public void SelectBeerType(BeerType beerType)
     {
         if (CurrencyManager.instance != null)
         {
             CurrencyManager.instance.SetBeerType(beerType);
-            
+
             // Update the liquid color in game
             UpdateLiquidColor(beerType.beerColor);
-            
+
             // Play selection sound
             AudioManager.instance.PlaySound("select");
-            
-            // Refresh beer selection UI
-            UpdateBeerButtonStates();
+
+            // Force refresh the entire beer button list
+            // This will regenerate all buttons with correct selected states
+            PopulateBeerButtons();
         }
     }
-    
+
     private int GetNextUpgradeCost(Upgrade upgrade)
     {
         // Cost increases with each level

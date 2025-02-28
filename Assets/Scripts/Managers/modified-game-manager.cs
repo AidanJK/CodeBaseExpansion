@@ -36,13 +36,7 @@ public class GameManager : MonoBehaviour
     [Header("UI ELEMENTS")]
     [HideInInspector] public int totalScore;
     private float porcentageCurrent;
-    [SerializeField] private TMP_Text pointsText;
-    [SerializeField] private TMP_Text maxScoreText;
-    [SerializeField] private TMP_Text porcentageText;
-    [SerializeField] private TMP_Text styleText;
     public float timeDelayForColor;
-    public GameObject outro;
-    [SerializeField] private TMP_Text maxScoreOutroText;
     [SerializeField] private TMP_Text scoreOutroText;
 
 
@@ -65,9 +59,6 @@ public class GameManager : MonoBehaviour
     private int lifeCount = 3;
     private int maxLifeCount = 3;
     [SerializeField] private Image hurtPanel;
-    [SerializeField] private TMP_Text life1Text;
-    [SerializeField] private TMP_Text life2Text;
-    [SerializeField] private TMP_Text life3Text;
     
     [Header("PROGRESSION SYSTEM")]
     [SerializeField] private TMP_Text moneyText;
@@ -91,7 +82,6 @@ public class GameManager : MonoBehaviour
     
     private void Start()
     {
-        porcentageText.gameObject.SetActive(false);
         ReadComboCount();
         
         // Set up shop button
@@ -280,16 +270,13 @@ public class GameManager : MonoBehaviour
         if (dis >= offsetBAD)
         {
             siphon.DOColor(ColorManager.instance.colorBad, timeDelayForColor);
-            UpdateStyleText(0);
         }
         else if (dis < offsetBAD && dis >= offsetGOOD)
         {
             siphon.DOColor(ColorManager.instance.colorGood, timeDelayForColor);
-            UpdateStyleText(1);
         }
         else if (dis < offsetGOOD && dis >= offsetPERFECT)
         {
-            UpdateStyleText(2);
             siphon.DOColor(ColorManager.instance.colorPerfect, timeDelayForColor);
         }
     }
@@ -302,28 +289,15 @@ public class GameManager : MonoBehaviour
     public void AddPoints(int pointsToAdd)
     {
         totalScore += pointsToAdd;
-        StartCoroutine(PorcentageScoreAnimation());
         UpdateUI();
     }
     
     void UpdateUI()
     {
-        pointsText.text = totalScore.ToString();
-        maxScoreText.text = "Max Score: " + PlayerPrefs.GetInt("MAXSCORE", 0);
-        porcentageText.text = porcentageCurrent.ToString("00.00") + "%";
-        
         // Update money display
         UpdateMoneyDisplay();
     }
     
-    IEnumerator PorcentageScoreAnimation()
-    {
-        porcentageText.gameObject.SetActive(true);
-        porcentageText.transform.DOScale(1.6f, animationDelay / 3).SetLoops(2, LoopType.Yoyo);
-        yield return new WaitForSeconds(animationDelay + 0.5f);
-        porcentageText.gameObject.SetActive(false);
-        porcentageText.transform.DOScale(1f, 0f);
-    }
     
     void ScoreCalculator()
     {
@@ -392,27 +366,6 @@ public class GameManager : MonoBehaviour
         }
     }
     
-    void UpdateStyleText(int index)
-    {
-        //BAD 0, GOOD 1, PERFECT 2
-
-        if (index == 0)
-        {
-            styleText.text = "Bad";
-            styleText.color = Color.red;
-        }
-        else if (index == 1)
-        {
-            styleText.text = "Good";
-            styleText.color = Color.yellow;
-        }
-        else if (index == 2)
-        {
-            styleText.text = "Perfect";
-            styleText.color = Color.green;
-        }
-    }
-    
     void ReadComboCount()
     {
         float dis = ReturnDistanceGoal();
@@ -477,46 +430,33 @@ public class GameManager : MonoBehaviour
             return;
         }
     }
-    
+
     void DamageLifeCount()
     {
         StartCoroutine(HurtAnimation());
-        lifeCount--;
-        if (lifeCount == maxLifeCount-1)
+
+        // Make sure pouring stops
+        if (InputManager.instance != null)
         {
-            life3Text.color = comboOff;
+            InputManager.instance.ResetState(true);
         }
-        if (lifeCount == maxLifeCount-2)
-        {
-            life2Text.color = comboOff;
-        }
-        if (lifeCount <= 0)
-        {
-            life1Text.color = comboOff;
-            canPlay = false;
-            
-            // Update outro with both score and money
-            maxScoreOutroText.text = "Max Score: " + PlayerPrefs.GetInt("MAXSCORE", 0);
-            scoreOutroText.text = "Score: " + totalScore.ToString();
-            
-            // Add money display to outro if available
-            if (CurrencyManager.instance != null)
-            {
-                // You may need to add a reference to a TMP_Text for this in the inspector
-                // moneyOutroText.text = "Money: $" + CurrencyManager.instance.GetCurrentMoney();
-            }
-            
-            StartCoroutine(OutroAnim());
-        }
+
+        // Play error sound
+        AudioManager.instance.PlaySound("wrong");
+
+        // Briefly pause before allowing new input (gives player time to see what happened)
+        StartCoroutine(BriefPause());
+
+        // Reset combo when taking damage
+        countCombo = 0;
     }
-    
-    IEnumerator OutroAnim()
+
+    // Add this coroutine to provide a short pause between pours after a mistake
+    IEnumerator BriefPause()
     {
-        AudioManager.instance.ChangePitch(0.5f, "background1");
-        yield return new WaitForSeconds(1f);
-        outro.SetActive(true);
-        outro.GetComponent<CanvasGroup>().DOFade(1, animationDelay / 2);
-        isOutro = true;
+        canPlay = false;
+        yield return new WaitForSeconds(0.5f);
+        canPlay = true;
     }
     
     IEnumerator HurtAnimation()
