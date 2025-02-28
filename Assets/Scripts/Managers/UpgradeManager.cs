@@ -367,7 +367,6 @@ public class UpgradeSystem : MonoBehaviour
         // Get beer types
         BeerType[] beerTypes = CurrencyManager.instance.GetAvailableBeerTypes();
 
-        // Debug log to check if we're getting beer types
         Debug.Log("Found " + (beerTypes?.Length ?? 0) + " beer types");
 
         if (beerTypes == null || beerTypes.Length == 0)
@@ -534,11 +533,10 @@ public class UpgradeSystem : MonoBehaviour
         Debug.Log("Updating " + upgradeButtons.Count + " button states for " + availableUpgrades.Count + " upgrades");
         int currentMoney = CurrencyManager.instance.GetCurrentMoney();
 
-        // Make sure we have the same number of buttons as upgrades
         if (upgradeButtons.Count != availableUpgrades.Count)
         {
             Debug.LogWarning("Button count mismatch: " + upgradeButtons.Count + " buttons vs " +
-                             availableUpgrades.Count + " upgrades. Will update what we can.");
+                             availableUpgrades.Count + " upgrades.");
         }
 
         for (int i = 0; i < availableUpgrades.Count && i < upgradeButtons.Count; i++)
@@ -684,7 +682,6 @@ public class UpgradeSystem : MonoBehaviour
         }
     }
 
-    // Enhanced purchase method with debugging
     public void PurchaseUpgrade(Upgrade upgrade)
     {
         if (upgrade == null)
@@ -707,7 +704,7 @@ public class UpgradeSystem : MonoBehaviour
         Debug.Log("Attempting purchase - Cost: $" + cost + ", Current money: $" + currentMoney +
                   ", Current level: " + upgrade.currentLevel + "/" + upgrade.maxLevel);
 
-        // Check if we can afford it and are not at max level
+        // Check if can afford it and are not at max level
         bool canAfford = currentMoney >= cost;
         bool notMaxLevel = upgrade.currentLevel < upgrade.maxLevel;
 
@@ -715,7 +712,6 @@ public class UpgradeSystem : MonoBehaviour
         {
             Debug.LogWarning("Cannot afford upgrade " + upgrade.upgradeName + " - Cost: $" + cost +
                              ", Current money: $" + currentMoney);
-            // Play "cannot afford" sound
             if (AudioManager.instance != null)
                 AudioManager.instance.PlaySound("wrong");
             return;
@@ -762,8 +758,7 @@ public class UpgradeSystem : MonoBehaviour
         }
         else
         {
-            Debug.LogError("Failed to spend money for upgrade " + upgrade.upgradeName +
-                          " even though we should have enough money. This should not happen!");
+            Debug.LogError("Failed to spend money for upgrade");
         }
     }
     // New method to update a specific button immediately after purchase
@@ -892,17 +887,13 @@ public class UpgradeSystem : MonoBehaviour
         // Add a debug statement for troubleshooting
         Debug.Log("Attempting to unlock beer: " + beerType.beerName + " (Cost: $" + beerType.unlockCost + ")");
 
-        // Check if we have enough money
+        // Check if player has enough money
         if (CurrencyManager.instance != null && CurrencyManager.instance.SpendMoney(beerType.unlockCost))
         {
             Debug.Log("Successfully unlocked beer: " + beerType.beerName);
 
             // Unlock the beer
             beerType.isUnlocked = true;
-
-            // Play unlock sound
-            if (AudioManager.instance != null)
-                AudioManager.instance.PlaySound("upgrade");
 
             // Show a money deduction message
             if (GameManager.instance != null)
@@ -913,16 +904,12 @@ public class UpgradeSystem : MonoBehaviour
             // Refresh beer buttons
             PopulateBeerButtons();
 
-            // Optionally auto-select this beer
             SelectBeerType(beerType);
         }
         else
         {
             Debug.Log("Not enough money to unlock beer: " + beerType.beerName);
 
-            // Optionally play a "can't afford" sound
-            if (AudioManager.instance != null)
-                AudioManager.instance.PlaySound("wrong");
         }
     }
 
@@ -946,7 +933,6 @@ public class UpgradeSystem : MonoBehaviour
                 AudioManager.instance.PlaySound("select");
 
             // Force refresh the entire beer button list
-            // This will regenerate all buttons with correct selected states
             PopulateBeerButtons();
         }
     }
@@ -1065,8 +1051,6 @@ public class Upgrade
             return false;
 
         Upgrade other = (Upgrade)obj;
-        // Use upgradeType and upgradeName as the equality criteria
-        // This assumes no two upgrades have the same name and type
         return this.upgradeType == other.upgradeType &&
                this.upgradeName == other.upgradeName;
     }

@@ -8,10 +8,10 @@ public class ShopManager : MonoBehaviour
     public static ShopManager instance;
 
     [Header("Shop UI Elements")]
-    [SerializeField] private GameObject shopPanel; // Your "ShopPanel" GameObject
-    [SerializeField] private GameObject beerSelectPanel; // Your "BeerSelectPanel" GameObject
-    [SerializeField] private GameObject upgradeStorePanel; // Your "UpgradeStore" GameObject
-    [SerializeField] private Button closeShopButton; // Your "CloseShopButton" GameObject
+    [SerializeField] private GameObject shopPanel; // "ShopPanel" GameObject
+    [SerializeField] private GameObject beerSelectPanel; // "BeerSelectPanel" GameObject
+    [SerializeField] private GameObject upgradeStorePanel; // "UpgradeStore" GameObject
+    [SerializeField] private Button closeShopButton; // "CloseShopButton" GameObject
 
     [Header("Tab Buttons")]
     [SerializeField] private Button beerStoreTabButton; // "Beer Store" button

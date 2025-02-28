@@ -207,7 +207,7 @@ public class CurrencyManager : MonoBehaviour
 
         Debug.Log($"Updating jar '{jar.nameOfJar}' with beer color: {beerType.beerColor}");
 
-        // First, ensure we have the sprite renderer
+        // First, ensure the sprite renderer is initialized
         if (jar.myLiquid != null)
         {
             // Make sure the liquid's SpriteRenderer is properly initialized
